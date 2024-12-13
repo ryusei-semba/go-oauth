@@ -1,9 +1,25 @@
 package main
 
-import "github.com/gin-gonic/gin"
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+)
 
 // main function
 func main() {
+	// .env ファイルから環境変数を読み込む
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	clientId := os.Getenv("CLIENT_ID")
+	fmt.Println("Client ID:", clientId)
+
 	// create a new gin app
 	app := gin.Default()
 
@@ -14,7 +30,7 @@ func main() {
 	})
 
 	// start the server
-	err := app.Run(":8080")
+	err = app.Run(":8080")
 	if err != nil {
 		return
 	}
