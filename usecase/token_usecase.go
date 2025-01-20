@@ -2,62 +2,73 @@ package usecase
 
 import (
 	"fmt"
+	"go-oauth/domain/token"
 	"go-oauth/infrastructure/database"
-	"time"
 )
 
-type TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
-	Scope       string `json:"scope"`
+// TokenUsecase トークン関連のユースケース
+type TokenUsecase struct {
+	tokenService *token.Service
 }
 
-func RequestToken() (TokenResponse, error) {
-	// データベース接続を取得
-	conn, err := database.NewDBConnection()
-	if err != nil {
-		return TokenResponse{}, fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer conn.Close()
-
-	// トークンリポジトリを初期化
-	repo := database.NewTokenRepository(conn)
-
-	// トークンテーブルを初期化
-	if err := repo.InitTokenTable(); err != nil {
-		return TokenResponse{}, fmt.Errorf("failed to init token table: %w", err)
+// NewTokenUsecase TokenUsecaseのインスタンスを生成する
+func NewTokenUsecase(db *database.DBConnection) (*TokenUsecase, error) {
+	// データベースを初期化
+	initializer := database.NewDBInitializer(db)
+	if err := initializer.InitializeDB(); err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// トークンの有効期限を設定（1時間）
-	expiresIn := 3600
-	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+	// リポジトリとサービスを初期化
+	repo := database.NewTokenRepository(db)
+	service := token.NewService(repo)
 
-	// トークンを保存
-	token := struct {
-		AccessToken  string
-		RefreshToken string
-		ClientID     string
-		UserID       string
-		ExpiresAt    time.Time
-		Scope        string
-	}{
-		AccessToken:  "sample_access_token",  // 本来はランダムな文字列を生成
-		RefreshToken: "sample_refresh_token", // 本来はランダムな文字列を生成
-		ClientID:     "sample_client_id",
-		UserID:       "sample_user_id",
-		ExpiresAt:    expiresAt,
-		Scope:        "read write",
-	}
-
-	if err := repo.SaveToken(token); err != nil {
-		return TokenResponse{}, fmt.Errorf("failed to save token: %w", err)
-	}
-
-	return TokenResponse{
-		AccessToken: token.AccessToken,
-		TokenType:   "Bearer",
-		ExpiresIn:   expiresIn,
-		Scope:       token.Scope,
+	return &TokenUsecase{
+		tokenService: service,
 	}, nil
+}
+
+// RequestToken トークンを要求する
+func (u *TokenUsecase) RequestToken() (*token.TokenResponse, error) {
+	// TODO: クライアント認証とユーザー認証の実装
+	clientID := "sample_client_id"
+	userID := "sample_user_id"
+	scope := "read write"
+
+	// トークンを発行
+	response, err := u.tokenService.IssueToken(clientID, userID, scope)
+	if err != nil {
+		return nil, fmt.Errorf("failed to issue token: %w", err)
+	}
+
+	return response, nil
+}
+
+// RefreshToken トークンを更新する
+func (u *TokenUsecase) RefreshToken(refreshToken string) (*token.TokenResponse, error) {
+	response, err := u.tokenService.RefreshToken(refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	return response, nil
+}
+
+// RevokeToken トークンを無効化する
+func (u *TokenUsecase) RevokeToken(accessToken string) error {
+	if err := u.tokenService.RevokeToken(accessToken); err != nil {
+		return fmt.Errorf("failed to revoke token: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateToken トークンを検証する
+func (u *TokenUsecase) ValidateToken(accessToken string) (*token.Token, error) {
+	validToken, err := u.tokenService.ValidateToken(accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate token: %w", err)
+	}
+
+	return validToken, nil
 }

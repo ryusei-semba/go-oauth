@@ -1,7 +1,19 @@
-.idea
+# IDE
+.idea/
+
+# Environment
+.env
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+*.duckdb-shm
+*.duckdb-wal
+
+# Go
+tmp/
+
 .vscode
 .DS_Store
-.env
 .air.toml
-tmp/
 my_database.duckdb

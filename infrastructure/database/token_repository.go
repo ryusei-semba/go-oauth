@@ -1,51 +1,25 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
-	"time"
+	"go-oauth/domain/token"
 )
 
-// TokenRepository トークン関連のデータベース操作を行うリポジトリ
+// TokenRepository トークンの永続化を担当するリポジトリの実装
 type TokenRepository struct {
 	conn *DBConnection
 }
 
 // NewTokenRepository TokenRepositoryのインスタンスを生成する
-func NewTokenRepository(conn *DBConnection) *TokenRepository {
+func NewTokenRepository(conn *DBConnection) token.Repository {
 	return &TokenRepository{
 		conn: conn,
 	}
 }
 
-// InitTokenTable トークンテーブルを初期化する
-func (r *TokenRepository) InitTokenTable() error {
-	query := `
-		CREATE TABLE IF NOT EXISTS oauth_tokens (
-			access_token VARCHAR PRIMARY KEY,
-			refresh_token VARCHAR,
-			client_id VARCHAR,
-			user_id VARCHAR,
-			expires_at TIMESTAMP,
-			scope VARCHAR,
-			created_at TIMESTAMP
-		)
-	`
-	_, err := r.conn.DB.Exec(query)
-	if err != nil {
-		return fmt.Errorf("failed to create oauth_tokens table: %w", err)
-	}
-	return nil
-}
-
-// SaveToken アクセストークンを保存する
-func (r *TokenRepository) SaveToken(token struct {
-	AccessToken  string
-	RefreshToken string
-	ClientID     string
-	UserID       string
-	ExpiresAt    time.Time
-	Scope        string
-}) error {
+// Save トークンを保存する
+func (r *TokenRepository) Save(token *token.Token) error {
 	query := `
 		INSERT INTO oauth_tokens (
 			access_token,
@@ -65,7 +39,7 @@ func (r *TokenRepository) SaveToken(token struct {
 		token.UserID,
 		token.ExpiresAt,
 		token.Scope,
-		time.Now(),
+		token.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
@@ -73,16 +47,8 @@ func (r *TokenRepository) SaveToken(token struct {
 	return nil
 }
 
-// GetToken アクセストークンを取得する
-func (r *TokenRepository) GetToken(accessToken string) (*struct {
-	AccessToken  string
-	RefreshToken string
-	ClientID     string
-	UserID       string
-	ExpiresAt    time.Time
-	Scope        string
-	CreatedAt    time.Time
-}, error) {
+// FindByAccessToken アクセストークンからトークンを取得する
+func (r *TokenRepository) FindByAccessToken(accessToken string) (*token.Token, error) {
 	query := `
 		SELECT
 			access_token,
@@ -96,34 +62,63 @@ func (r *TokenRepository) GetToken(accessToken string) (*struct {
 		WHERE access_token = ?
 	`
 
-	var token struct {
-		AccessToken  string
-		RefreshToken string
-		ClientID     string
-		UserID       string
-		ExpiresAt    time.Time
-		Scope        string
-		CreatedAt    time.Time
-	}
-
+	var t token.Token
 	err := r.conn.DB.QueryRow(query, accessToken).Scan(
-		&token.AccessToken,
-		&token.RefreshToken,
-		&token.ClientID,
-		&token.UserID,
-		&token.ExpiresAt,
-		&token.Scope,
-		&token.CreatedAt,
+		&t.AccessToken,
+		&t.RefreshToken,
+		&t.ClientID,
+		&t.UserID,
+		&t.ExpiresAt,
+		&t.Scope,
+		&t.CreatedAt,
 	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("token not found")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token: %w", err)
 	}
 
-	return &token, nil
+	return &t, nil
 }
 
-// DeleteToken アクセストークンを削除する
-func (r *TokenRepository) DeleteToken(accessToken string) error {
+// FindByRefreshToken リフレッシュトークンからトークンを取得する
+func (r *TokenRepository) FindByRefreshToken(refreshToken string) (*token.Token, error) {
+	query := `
+		SELECT
+			access_token,
+			refresh_token,
+			client_id,
+			user_id,
+			expires_at,
+			scope,
+			created_at
+		FROM oauth_tokens
+		WHERE refresh_token = ?
+	`
+
+	var t token.Token
+	err := r.conn.DB.QueryRow(query, refreshToken).Scan(
+		&t.AccessToken,
+		&t.RefreshToken,
+		&t.ClientID,
+		&t.UserID,
+		&t.ExpiresAt,
+		&t.Scope,
+		&t.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("token not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token: %w", err)
+	}
+
+	return &t, nil
+}
+
+// Delete トークンを削除する
+func (r *TokenRepository) Delete(accessToken string) error {
 	query := `DELETE FROM oauth_tokens WHERE access_token = ?`
 	_, err := r.conn.DB.Exec(query, accessToken)
 	if err != nil {
